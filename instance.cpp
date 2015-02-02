@@ -65,7 +65,14 @@ Instance::~Instance() {
 }
 
 string Instance::getName() {
-	return properties[propertyNames.begin() - find(propertyNames.begin(), propertyNames.end(), "Name")].getStringValue();
+	unsigned int i;
+    for (i = 0; i < properties.size(); i++) {
+        if (properties[i].getPropertyName() == "Name") {
+            //cout << "TYPE:" << properties[i].getTypeID() << endl;
+            return properties[i].getStringValue();
+        }
+    }
+    return "UNKNOWN";
 }
 
 void Instance::setParentReferent(int n) {
@@ -80,6 +87,7 @@ int Instance::getPropertyCount() {
 }
 
 Instance& Instance::operator=(Instance* n) {
+  int i;
   compressedLen = n->getCompressedLen();
   decompressedLen = n->getDecompressedLen();
   typeID = n->getTypeID();
@@ -89,6 +97,13 @@ Instance& Instance::operator=(Instance* n) {
   rawData = n->getRawData();
   typeName = n->getTypeName();
   additionalDataContent = n->getAdditionalDataContent();
+  parentReferent = n->getParentReferent();
+  properties.clear();
+  propertyNames.clear();
+  for (i = 0; i < n->getPropertyCount(); i++) {
+      properties.push_back(n->getProperty(i));
+      propertyNames.push_back(n->getPropertyName(i));
+  }
   return *this;
 }
 

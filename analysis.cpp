@@ -28,9 +28,20 @@ union floatConverter {
 } f;
 
 using namespace std;
+static vector<string> createdDirs;
 
 int countLines(string str) {
     return count(str.begin(), str.end(), '\n');
+}
+
+int countInstances(int typeID) {
+    unsigned int i, j = 0;
+    for (i = 0; i < gameObjects.size(); i++) {
+        if (gameObjects[i].getTypeID() == typeID) {
+            j++;
+        }
+    }
+    return j;
 }
 
 void dumpSource(string path, string source) {
@@ -128,7 +139,19 @@ string dumpCFrame(CFrame a) {
     return ret.str();
 }
 
+string int2string(int a) {
+    stringstream ss;
+    ss << a;
+    return ss.str();
+}
+
 string getExtractedPath(int inst) {
+  if (createdDirs[inst].length()) {
+      return createdDirs[inst];
+  }
+  struct stat info;
+  //cout << "INST:" << inst << endl;
+  int i = 0;
   string ret = gameObjects[inst].getName() + string(".") + gameObjects[inst].getTypeName() + string("/");
   int currinst = inst;
   while (gameObjects[currinst].getParentReferent() != -1) {
@@ -136,9 +159,16 @@ string getExtractedPath(int inst) {
     ret = gameObjects[currinst].getName() + string(".") + gameObjects[currinst].getTypeName() + string("/") + ret;
   }
   ret = "extract/" + ret;
-  voidFreadValue = system(("mkdir -p \"" + ret + "\"").c_str());
+  string numberedret = ret;
+  while (stat(numberedret.c_str(), &info) == 0 && S_ISDIR(info.st_mode)) {
+      i++;
+      numberedret = ret.substr(0, ret.length() - 1) + string(".") + int2string(i);
+      //cout << numberedret << endl;
+  }
+  createdDirs[inst] = numberedret;
+  voidFreadValue = system(("mkdir -p \"" + numberedret + "\"").c_str());
 
-  return ret;
+  return numberedret + "/";
 }
 
 int getInstanceIndex(int type, int typeIndex) {
@@ -411,6 +441,7 @@ int main(int argc, char* argv[]) {
   printf("Unique types: %d\n", uniqueTypes);
   int totalObjects = readLittleEndian(rbxl);
   gameObjects.resize(totalObjects);
+  createdDirs.resize(totalObjects);
   printf("Total objects: %d\n", totalObjects);
   Instance currInstance;
 
@@ -1204,7 +1235,7 @@ int main(int argc, char* argv[]) {
       numInstances = 0;
 
       // Count number of instances
-      while (numInstances != (decompressed.length() - stringpos) / 12) {
+      /*while (numInstances != (decompressed.length() - stringpos) / 12) {
         if (decompressed.at(stringpos) == '\0') {
           stringpos += 0x24;
           numInstances++;
@@ -1213,7 +1244,8 @@ int main(int argc, char* argv[]) {
           stringpos++;
           numInstances++;
         }
-      }
+    }*/
+    numInstances = countInstances(typeID);
 
       vecx = (int*)realloc(vecx, numInstances * sizeof(int));
       vecy = (int*)realloc(vecy, numInstances * sizeof(int));
@@ -1246,7 +1278,7 @@ int main(int argc, char* argv[]) {
       stringpos = 9 + typeNameLength;
       // Parse the rotation matrix
       i = 0;
-      while (i != (decompressed.length() - stringpos) / 12) {
+      while (i < numInstances) {
         // Long values
         if (decompressed.at(stringpos) == '\0') {
           for (j = 0; j < 9; j++) {
@@ -1333,6 +1365,7 @@ int main(int argc, char* argv[]) {
               matrix = computeRotMatrix(-180,-90,0);
               break;
           }
+          stringpos++;
         }
         r00[i] = matrix[0];
         r01[i] = matrix[1];
@@ -1346,7 +1379,7 @@ int main(int argc, char* argv[]) {
         i++;
       }
 
-      stringpos++;
+      //stringpos++;
 
       for (i = 0; i < numInstances * 4; i++) {
         referentIndex = i % numInstances;

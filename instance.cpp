@@ -53,15 +53,29 @@ public:
   int getParentReferent();
 
   Instance();
+  Instance(int, int, int, int, int, int, int, int, string, string, string);
   ~Instance();
 };
 
 Instance::Instance() {
 
 }
-
 Instance::~Instance() {
 
+}
+
+Instance::Instance(int _compressedLen, int _decompressedLen, int _typeID, int _typeNameLength, int _additionalData, int _referent, int _numReferents, int _parentReferent, string _rawData, string _typeName, string _additionalDataContent) {
+    compressedLen       = _compressedLen;
+    decompressedLen     = _decompressedLen;
+    typeID              = _typeID;
+    typeNameLength      = _typeNameLength;
+    additionalData      = _additionalData;
+    referent            = _referent;
+    numReferents        = _numReferents;
+    parentReferent      = _parentReferent;
+    rawData             = _rawData;
+    typeName            = _typeName;
+    additionalDataContent = _additionalDataContent;
 }
 
 string Instance::getName() {

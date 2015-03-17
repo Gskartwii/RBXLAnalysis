@@ -15,6 +15,25 @@ static ofstream currObjectStream;
 
 static vector<Instance> gameObjects;
 static vector<int> usedspots;
+static unsigned int i = 0, numInstances = 0, j = 0;
+static int* referents = NULL;
+static string content;
+static vector<string> typeNames;
+static Property currProperty;
+static Axis currAxis;
+static BrickColor currBrickColor;
+static CFrame currCFrame;
+static Color3 currColor3;
+static Faces currFaces;
+static Ray currRay;
+static UDim2 currUDim2;
+static Vector2 currVector2;
+static Vector3 currVector3;
+static Instance currInstance;
+
+static char currChar;
+static Property currProp;
+static int numReferents, typeNameLength;
 int voidFreadValue = 0; // To silence g++ warnings about ignoring fread return values
 
 union doubleConverter {
@@ -29,6 +48,8 @@ union floatConverter {
 
 using namespace std;
 static vector<string> createdDirs;
+static int compressedLength, decompressedLength, typeID, additionalData, k, shiftBy, referentIndex, lastInteger, dataType, stringLen;
+static string decompressed, typeName;
 
 int countLines(string str) {
     return count(str.begin(), str.end(), '\n');
@@ -395,72 +416,28 @@ string decompressData(FILE* decompress, int compressedLen, int decompressedLen) 
 
   return decompressed;
 }
-/*string decompressData(FILE* decompress, int compressedLen, int decompressedLen) {
-  string buf = string(decompressedLen + 5, '\0');
-  blosc_init();
-  blosc_set_compressor("lz4");
-  string input = string(compressedLen + 5, '\0');
-  fread(&input[0], 1, compressedLen, decompress);
-  cout << "IN" << input << endl;
-  cout << "DECOM" << blosc_decompress(input.c_str(), &buf[0], decompressedLen) << endl;
-  blosc_destroy();
-  return buf;
-}*/
 
 int readLittleEndian(FILE* stream) {
   return (int)(unsigned char) fgetc(stream) + ((int)(unsigned char) fgetc(stream) << 8) + ((int)(unsigned char) fgetc(stream) << 16) + ((int)(unsigned char) fgetc(stream) << 24);
 }
 
 int readLittleEndianString(string str, int offset) {
-  /*char* tmp = (char*) (*string + offset);
-  return (int) *tmp + ((int) *(tmp + 1) << 8) + ((int) *(tmp + 2) << 16) + ((int) *(tmp + 3) << 24);*/
   return (int)(unsigned char) str[offset + 0] + ((int)(unsigned char) str[offset + 1] << 8) + ((int)(unsigned char) str[offset + 2] << 16) + ((int)(unsigned char) str[offset + 3] << 24);
 }
 
-int main(int argc, char* argv[]) {
-  if (argc != 2) {
-    fprintf(stderr, "Usage: %s <path to .rbxl file>\n", argv[0]);
-    return 1;
-  }
+void checkHeader(FILE* rbxl) {
+    char* buf = (char*)malloc(sizeof(char) * 16);
+    voidFreadValue = fread(buf, 1, 16, rbxl);
+    if (strcmp(buf, "<roblox!\x89\xFF\r\n\x1A\n\0\0") != 0) {
+        fprintf(stderr, "\e[31mInvalid header\e[0m\n");
+        free(buf);
+        exit(3);
+    }
+    printf("Valid header found.\n");
+    free(buf);
+}
 
-  FILE* rbxl = fopen(argv[1], "rb");
-  if (rbxl == NULL) {
-    perror("fopen: unable to open file");
-    return 2;
-  }
-
-  char* buf = (char*)malloc(sizeof(char) * 16);
-  voidFreadValue = fread(buf, 1, 16, rbxl);
-  if (strcmp(buf, "<roblox!\x89\xFF\r\n\x1A\n\0\0") != 0) {
-    fprintf(stderr, "\e[31mInvalid header\e[0m\n");
-    return 3;
-  }
-  printf("Valid header found.\n");
-
-  int uniqueTypes = readLittleEndian(rbxl);
-  printf("Unique types: %d\n", uniqueTypes);
-  int totalObjects = readLittleEndian(rbxl);
-  gameObjects.resize(totalObjects);
-  createdDirs.resize(totalObjects);
-  printf("Total objects: %d\n", totalObjects);
-  Instance currInstance;
-
-  fseek(rbxl, 8, SEEK_CUR); // Skip padding
-
-  free(buf);
-
-  char* instancebuf = (char*)malloc(sizeof(char) * 5);
-
-  voidFreadValue = fread(instancebuf, 1, 4, rbxl);
-  instancebuf[4] = '\0';
-
-  string decompressed, typeName;
-  unsigned int i = 0, numInstances = 0, j = 0;
-  int compressedLength, decompressedLength, typeID, typeNameLength, additionalData, k, shiftBy, referentIndex, lastInteger, refcounter = 0, dataType, stringLen;
-  int* referents = NULL;
-  string content;
-  vector<string> typeNames;
-  while (strcmp(instancebuf, "INST") == 0) {
+void readInstance(FILE* rbxl) {
     compressedLength = readLittleEndian(rbxl);
     decompressedLength = readLittleEndian(rbxl);
     fseek(rbxl, 4, SEEK_CUR); // Skip padding
@@ -483,43 +460,94 @@ int main(int argc, char* argv[]) {
     referents = (int*) realloc(referents, sizeof(int) * numInstances);
 
     for (i = 0; i < numInstances; i++) {
-      referents[i] = 0; // Damn you, realloc!
+        referents[i] = 0; // Damn you, realloc!
     }
 
 
     for (i = 0; i < numInstances * 4; i++) {
-      //shiftBy = (numInstances - i / numInstances) * 8;
-      referentIndex = i % numInstances;
-      shiftBy = (3 - i / numInstances) * 8;
-      //cout << shiftBy << "," << referentIndex << "," << (int)decompressed.at(13 + typeNameLength + i) << endl;
-      referents[referentIndex] += (int)(unsigned char) decompressed.at(13 + typeNameLength + i) << shiftBy;
+        //shiftBy = (numInstances - i / numInstances) * 8;
+        referentIndex = i % numInstances;
+        shiftBy = (3 - i / numInstances) * 8;
+        //cout << shiftBy << "," << referentIndex << "," << (int)decompressed.at(13 + typeNameLength + i) << endl;
+        referents[referentIndex] += (int)(unsigned char) decompressed.at(13 + typeNameLength + i) << shiftBy;
     }
 
     lastInteger = 0;
     for (i = 0; i < numInstances; i++) {
-      lastInteger += getDetransformedInteger(referents[i]);
-      refcounter++;
-      printf("Referent #\e[33;1m%d\e[0m (\e[33;1m0x%X\e[0m): \e[33;1m%d\e[0m (\e[33;1m0x%X\e[0m)\n", i, i, lastInteger, lastInteger);
-      currInstance = new Instance();
-      currInstance.setCompressedLen(compressedLength);
-      currInstance.setDecompressedLen(decompressedLength);
-      currInstance.setTypeID(typeID);
-      currInstance.setTypeNameLength(typeNameLength);
-      currInstance.setAdditionalData(additionalData);
-      currInstance.setReferent(lastInteger);
-      currInstance.setNumReferents(numInstances);
-      currInstance.setRawData(decompressed);
-      currInstance.setTypeName(typeName);
-      currInstance.setAdditionalDataContent("");
+        lastInteger += getDetransformedInteger(referents[i]);
+        printf("Referent #\e[33;1m%d\e[0m (\e[33;1m0x%X\e[0m): \e[33;1m%d\e[0m (\e[33;1m0x%X\e[0m)\n", i, i, lastInteger, lastInteger);
+        currInstance = new Instance(compressedLength, decompressedLength, typeID, typeNameLength, additionalData, lastInteger, numReferents, -1, decompressed, typeName, decompressed.substr(9 + typeNameLength + numInstances * 4));
 
-      gameObjects[lastInteger] = currInstance;
+        gameObjects[lastInteger] = currInstance;
     }
 
     printf("Raw data: \e[34;1m");
     dumpStdString(decompressed);
     printf("\e[0m\n");
+}
 
-    voidFreadValue = fread(instancebuf, 1, 4, rbxl);
+Property readProperty(FILE* rbxl) {
+    compressedLength = readLittleEndian(rbxl);
+    decompressedLength = readLittleEndian(rbxl);
+    fseek(rbxl, 4, SEEK_CUR); // Skip padding
+    decompressed = decompressData(rbxl, compressedLength, decompressedLength);
+    printf("\e[32m==== BEGIN PROP DUMP ====\e[0m\n");
+    typeID = readLittleEndianString(decompressed, 0);
+    typeNameLength = readLittleEndianString(decompressed, 4);
+    typeName = decompressed.substr(8, typeNameLength);
+    dataType = (int) decompressed.at(8 + typeNameLength);
+
+    printf("Compressed Length: \e[36;1m%d\e[0m (\e[36;1m0x%X\e[0m)\n", compressedLength, compressedLength);
+    printf("Decompressed Length: \e[36;1m%d\e[0m (\e[36;1m0x%X\e[0m)\n", decompressedLength, decompressedLength);
+    printf("Type ID: \e[36;1m%d\e[0m (\e[36;1m0x%X\e[0m - \e[36;1m%s\e[0m)\n", typeID, typeID, typeNames[typeID].c_str());
+    printf("Type Name Length: \e[36;1m%d\e[0m (\e[36;1m0x%X\e[0m)\n", typeNameLength, typeNameLength);
+    printf("Type Name: \e[36;1m%s\e[0m\n", typeName.c_str());
+    printf("Data type: \e[36;1m%d\e[0m (\e[36;1m0x%X\e[0m - \e[36;1m%s\e[0m)\n", dataType, dataType, dataTypeToString(dataType).c_str());
+    printf("Raw data: \e[34;1m");
+    dumpStdString(decompressed);
+    printf("\e[0m\n");
+
+    currProperty = new Property();
+    currProperty.setCompressedLength(compressedLength);
+    currProperty.setDecompressedLength(decompressedLength);
+    currProperty.setRawData(decompressed);
+    currProperty.setTypeID(typeID);
+    currProperty.setPropertyNameLength(typeNameLength);
+    currProperty.setPropertyName(typeName);
+    currProperty.setDataType(dataType);
+    return currProperty;
+}
+
+int main(int argc, char* argv[]) {
+  if (argc != 2) {
+    fprintf(stderr, "Usage: %s <path to .rbxl file>\n", argv[0]);
+    return 1;
+  }
+
+  FILE* rbxl = fopen(argv[1], "rb");
+  if (rbxl == NULL) {
+    perror("fopen: unable to open file");
+    return 2;
+  }
+  checkHeader(rbxl);
+
+  int uniqueTypes = readLittleEndian(rbxl);
+  printf("Unique types: %d\n", uniqueTypes);
+  int totalObjects = readLittleEndian(rbxl);
+  gameObjects.resize(totalObjects);
+  createdDirs.resize(totalObjects);
+  printf("Total objects: %d\n", totalObjects);
+
+  fseek(rbxl, 8, SEEK_CUR); // Skip padding
+
+  char* instancebuf = (char*)malloc(sizeof(char) * 5);
+
+  voidFreadValue = fread(instancebuf, 1, 4, rbxl);
+  instancebuf[4] = '\0';
+
+  while (strcmp(instancebuf, "INST") == 0) {
+      readInstance(rbxl);
+      voidFreadValue = fread(instancebuf, 1, 4, rbxl);
   }
 
   int* ints32 = NULL;
@@ -548,39 +576,8 @@ int main(int argc, char* argv[]) {
   vector<float> matrix(9);
   vector<float> angles(3);
 
-  Property currProperty;
-  Axis currAxis;
-  BrickColor currBrickColor;
-  CFrame currCFrame;
-  Color3 currColor3;
-  Faces currFaces;
-  Ray currRay;
-  UDim2 currUDim2;
-  Vector2 currVector2;
-  Vector3 currVector3;
-
-  char currChar;
-
   while (strcmp(instancebuf, "PROP") == 0) {
-    compressedLength = readLittleEndian(rbxl);
-    decompressedLength = readLittleEndian(rbxl);
-    fseek(rbxl, 4, SEEK_CUR); // Skip padding
-    decompressed = decompressData(rbxl, compressedLength, decompressedLength);
-    printf("\e[32m==== BEGIN PROP DUMP ====\e[0m\n");
-    typeID = readLittleEndianString(decompressed, 0);
-    typeNameLength = readLittleEndianString(decompressed, 4);
-    typeName = decompressed.substr(8, typeNameLength);
-    dataType = (int) decompressed.at(8 + typeNameLength);
-
-    printf("Compressed Length: \e[36;1m%d\e[0m (\e[36;1m0x%X\e[0m)\n", compressedLength, compressedLength);
-    printf("Decompressed Length: \e[36;1m%d\e[0m (\e[36;1m0x%X\e[0m)\n", decompressedLength, decompressedLength);
-    printf("Type ID: \e[36;1m%d\e[0m (\e[36;1m0x%X\e[0m - \e[36;1m%s\e[0m)\n", typeID, typeID, typeNames[typeID].c_str());
-    printf("Type Name Length: \e[36;1m%d\e[0m (\e[36;1m0x%X\e[0m)\n", typeNameLength, typeNameLength);
-    printf("Type Name: \e[36;1m%s\e[0m\n", typeName.c_str());
-    printf("Data type: \e[36;1m%d\e[0m (\e[36;1m0x%X\e[0m - \e[36;1m%s\e[0m)\n", dataType, dataType, dataTypeToString(dataType).c_str());
-    printf("Raw data: \e[34;1m");
-    dumpStdString(decompressed);
-    printf("\e[0m\n");
+      currProp = readProperty(rbxl);
 
     if (dataType == 0x1) {
       i = 9 + typeNameLength;
@@ -590,14 +587,6 @@ int main(int argc, char* argv[]) {
         i += 4;
         printf("String entry %d (%X): \e[36;1m%s\e[0m\n", j, j, decompressed.substr(i, stringLen).c_str());
         i += stringLen;
-        currProperty = new Property();
-        currProperty.setCompressedLength(compressedLength);
-        currProperty.setDecompressedLength(decompressedLength);
-        currProperty.setRawData(decompressed);
-        currProperty.setTypeID(typeID);
-        currProperty.setPropertyNameLength(typeNameLength);
-        currProperty.setPropertyName(typeName);
-        currProperty.setDataType(dataType);
         currProperty.setStringValue(decompressed.substr(i - stringLen, stringLen));
         gameObjects[getInstanceIndex(typeID, j)].addProperty(currProperty);
         gameObjects[getInstanceIndex(typeID, j)].addPropertyName(typeName);
@@ -1480,7 +1469,6 @@ int main(int argc, char* argv[]) {
         currProperty.setPropertyName(typeName);
         currProperty.setDataType(dataType);
         lastInteger += getDetransformedInteger(referents[i]);
-        refcounter++;
         currProperty.setReferentValue(lastInteger);
         gameObjects[getInstanceIndex(typeID, i)].addProperty(currProperty);
         gameObjects[getInstanceIndex(typeID, i)].addPropertyName(typeName);
@@ -1548,9 +1536,8 @@ int main(int argc, char* argv[]) {
     cout << "Please wait, dumping instances..." << endl;
 
   for (i = 0; i < numObjectsPRNT; i++) {
-    //cout << "try to open" << (getExtractedPath(i) + "properties.rbx_props") << endl;
+    cout << "Dumping: " << getExtractedPath(i) << endl;
 	currObjectStream.open((getExtractedPath(i) + "properties.rbx_props").c_str());
-    //cout << "opening stream" << (getExtractedPath(i) + "properties.rbx_props") << endl << flush;
 	currObjectStream << "// RBXL Analysis Object Property Extraction" << endl;
 	currObjectStream << "// This file is not meant to be edited manually" << endl;
 	for (j = 0; j < (unsigned int) gameObjects[i].getPropertyCount(); j++) {

@@ -1,2 +1,5 @@
 playerdb.rbxl
 analysis
+*.rbxl
+extract
+*.rbxm
